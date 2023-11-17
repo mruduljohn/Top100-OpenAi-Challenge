@@ -20,6 +20,10 @@
       {
         "command": "extension.configureAndSetupProject",
         "title": "devflow"
+      },
+      {
+        "command": "extension.clearResponseHistory",
+        "title": "Clear Response History"
       }
     ]
   },

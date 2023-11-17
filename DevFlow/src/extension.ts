@@ -37,47 +37,85 @@ export function activate(context: vscode.ExtensionContext) {
         const userPrompt = await vscode.window.showInputBox({
             prompt: 'Enter your prompt:'
         });
-
-        if (userPrompt) {
-            const customPrompt = `The following is the user prompt. You should give the complete code a noob needs to execute line by line,THERE SHOULD NOT BE ANY OTHER CHARACTER BEFORE COMMANDS IN EACH LINE:  "${userPrompt}"`;
-            try {
-                const response = await generateSetupCommands(openaiApiKey, customPrompt, responseHistory);
-
-                // Save the response to response history with a timestamp
-                const timestamp = Date.now();
-                responseHistory.push({ timestamp, response });
+        if(userPrompt) {
                 
-                // Limit the response history to the last two entries
-                responseHistory = responseHistory.slice(-2);
-
-                context.globalState.update('responseHistory', responseHistory);
-
-                // Display the response in a new webview panel
-                displayApiResponse(response);
-
-                const lines = response.split('\n');
-
-                // Use regular expressions to filter out lines that seem to be commands
-                const commandLines = lines
-                .map(line => line.replace(/^\s*\d+[.)]\s*/, '')) // Remove leading numbers with dot or parenthesis
-                .filter(line => line.trim() !== ''); // Filter out empty lines after removal
-
-                // Join the command lines into a single string
-                const commandString = commandLines.join('\n');
-
-                // Run the generated commands in the terminal
-                const terminal = vscode.window.createTerminal('DevFlow Running');
-                terminal.sendText(commandString);
-                terminal.show();
-
-                vscode.window.showInformationMessage('DevFlow Executed!');
-            } catch (error: any) {
-                vscode.window.showErrorMessage(`DevFlow failed to proceed: ${error.message}`);
+            if (userPrompt.toLowerCase().includes('suggestions') || userPrompt.toLowerCase().includes('extensions')) {
+                let customPrompt = 'Analyze the response and list suitable suggestions';
+                try {
+                    const response = await generateResponse(openaiApiKey, customPrompt, responseHistory);
+    
+                    // Save the response to response history with a timestamp
+                    const timestamp = Date.now();
+                    responseHistory.push({ timestamp, response });
+    
+                    // Limit the response history to the last two entries
+                    responseHistory = responseHistory.slice(-2);
+    
+                    context.globalState.update('responseHistory', responseHistory);
+    
+                    // Display the response in a new webview panel
+                    displayApiResponse(response);
+    
+                    // Ask the user to name the extension they want to install
+                    const extensionName = await vscode.window.showInputBox({
+                        prompt: 'Enter the name of the extension you want to install (or press ESC to skip):'
+                    });
+    
+                    if (extensionName && !extensionName.toLowerCase().includes('esc')) {
+                        // Run the generated commands in the terminal
+                        const terminal = vscode.window.createTerminal('DevFlow Running');
+                        const installCommand = `code --install-extension ${extensionName}`;
+                        terminal.sendText(installCommand);
+                        terminal.show();
+    
+                        vscode.window.showInformationMessage(`Extension '${extensionName}' installed successfully!`);
+                    } else {
+                        vscode.window.showInformationMessage('Extension installation skipped.');
+                    }
+                } catch (error: any) {
+                    vscode.window.showErrorMessage(`DevFlow failed to proceed: ${error.message}`);
+                }
             }
-        } else {
-            vscode.window.showWarningMessage('No project description entered. Project setup canceled.');
+            }
+            else {
+                let customPrompt = `The following is the user prompt. You should give the complete code a noob needs to execute line by line,THERE SHOULD NOT BE ANY OTHER CHARACTER BEFORE COMMANDS IN EACH LINE:  "${userPrompt}"`;
+                try {
+                    const response = await generateSetupCommands(openaiApiKey, customPrompt, responseHistory);
+
+                    // Save the response to response history with a timestamp
+                    const timestamp = Date.now();
+                    responseHistory.push({ timestamp, response });
+                    
+                    // Limit the response history to the last two entries
+                    responseHistory = responseHistory.slice(-2);
+
+                    context.globalState.update('responseHistory', responseHistory);
+
+                    // Display the response in a new webview panel
+                    displayApiResponse(response);
+
+                    const lines = response.split('\n');
+
+                    // Use regular expressions to filter out lines that seem to be commands
+                    const commandLines = lines
+                    .map(line => line.replace(/^\s*\d+[.)]\s*/, '')) // Remove leading numbers with dot or parenthesis
+                    .filter(line => line.trim() !== ''); // Filter out empty lines after removal
+
+                    // Join the command lines into a single string
+                    const commandString = commandLines.join('\n');
+
+                    // Run the generated commands in the terminal
+                    const terminal = vscode.window.createTerminal('DevFlow Running');
+                    terminal.sendText(commandString);
+                    terminal.show();
+
+                    vscode.window.showInformationMessage('DevFlow Executed!');
+                } catch (error: any) {
+                    vscode.window.showErrorMessage(`DevFlow failed to proceed: ${error.message}`);
+                }
+            }
         }
-    });
+     );
 
     // Add a command to clear the response history
     let clearHistoryDisposable = vscode.commands.registerCommand('extension.clearResponseHistory', () => {
@@ -100,9 +138,9 @@ function displayApiResponse(response: string): void {
     outputChannel.show(true);
 }
 
-async function generateSetupCommands(apiKey: string, projectDescription: string, responseHistory: ResponseHistoryEntry[]): Promise<string> {
+async function generateResponse(apiKey: string, userPrompt: string, responseHistory: ResponseHistoryEntry[]): Promise<string> {
     const openaiApiEndpoint = 'https://api.openai.com/v1/completions';
-    const prompt = `Understand the user prompt and give ONLY terminal package installation codes. ${projectDescription}`;
+    const prompt = `Understand the user prompt and provide relevant information. ${userPrompt}`;
 
     // Combine the current prompt with the context from response history
     const context = responseHistory.map(entry => entry.response).join('\n');
@@ -128,56 +166,71 @@ async function generateSetupCommands(apiKey: string, projectDescription: string,
             throw new Error('Unexpected OpenAI API response format');
         }
 
-        const generatedCommands = response.data.choices.map((choice: any) => choice.text.trim()).join('\n');
+        const generatedResponse = response.data.choices.map((choice: any) => choice.text.trim()).join('\n');
 
-        // Check if the response contains error messages
-        if (response.data.choices.some((choice: any) => choice.text.includes('error'))) {
-            throw new Error('Error detected in generated commands');
+        // Add functionality to suggest VS Code extensions
+        if (userPrompt.toLowerCase().includes('suggestions') || userPrompt.toLowerCase().includes('extensions')) {
+            const suggestedExtensions = suggestExtensions(generatedResponse);
+            return `${generatedResponse}\n\nSuggested Extensions:\n${suggestedExtensions}`;
         }
 
-        return generatedCommands;
+        return generatedResponse;
     } catch (error: any) {
-        // Handle errors and provide feedback
-        if (error.response && error.response.data && error.response.data.error) {
-            // OpenAI API error response
-            const apiErrorMessage = error.response.data.error.message;
-            throw new Error(`OpenAI API error: ${apiErrorMessage}`);
-        } else {
-            // Other errors
-            throw new Error(`Failed to generate setup commands from OpenAI API: ${error.message}`);
-        }
+        throw new Error(`Failed to generate response from OpenAI API: ${error.message}`);
     }
 }
 
-async function runCommandsInTerminal(commandString: string): Promise<void> {
-    return new Promise((resolve, reject) => {
-        // Create a terminal to execute the commands
-        const terminal = vscode.window.createTerminal('DevFlow Running');
+function suggestExtensions(generatedResponse: string): string {
+    // Extract relevant information from the generated response and suggest VS Code extensions
+    // For demonstration purposes, this is a simple implementation. You may need to enhance it based on your requirements.
+    const regex = /(?:\binstall\b|\buse\b|\btry\b)\s+(?:the\s+)?(?:VS\s*Code\s*)?(?:extension\s*)?(\w+)/gi;
+    const matches = generatedResponse.matchAll(regex);
 
-        // Capture the output of the terminal
-        let terminalOutput = '';
+    const suggestedExtensions: string[] = [];
 
-        // Attach event listener for terminal data
-        terminal.onDidWriteData(data => {
-            terminalOutput += data;
-        });
+    for (const match of matches) {
+        const extensionName = match[1];
+        if (extensionName) {
+            suggestedExtensions.push(extensionName);
+        }
+    }
 
-        // Attach event listener for terminal exit
-        terminal.onDidClose(exitCode => {
-            if (exitCode === 0) {
-                // Resolve if the terminal exits successfully (exit code 0)
-                resolve();
-            } else {
-                // Reject with the captured output if there is an error
-                reject(new Error(`Error executing commands:\n${terminalOutput}`));
-            }
-        });
-
-        // Send the commands to the terminal
-        terminal.sendText(commandString);
-        terminal.show();
-    });
+    return suggestedExtensions.join('\n');
 }
 
+async function generateSetupCommands(apiKey: string, projectDescription: string, responseHistory: ResponseHistoryEntry[]): Promise<string> {
+    const openaiApiEndpoint = 'https://api.openai.com/v1/completions';
+    const prompt = `Understand the user prompt and give ONLY terminal package installation codes. ${projectDescription}`;
+    
+    // Combine the current prompt with the context from response history
+    const context = responseHistory.map(entry => entry.response).join('\n');
+    const combinedPrompt = `${prompt}\n\nPrevious responses:\n${context}`;
+
+    try {
+        const response = await axios.post(
+            openaiApiEndpoint,
+            {
+                prompt: combinedPrompt,
+                model:"text-davinci-003",
+                max_tokens: 400,
+            },
+            {
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${apiKey}`,
+                },
+            }
+        );
+
+        if (!response.data.choices || !Array.isArray(response.data.choices)) {
+            throw new Error('Unexpected OpenAI API response format');
+        }
+
+        const generatedCommands = response.data.choices.map((choice: any) => choice.text.trim()).join('\n');
+        return generatedCommands;
+    } catch (error: any) {
+        throw new Error(`Failed to generate setup commands from OpenAI API: ${error.message}`);
+    }
+}
 
 export function deactivate() {}
