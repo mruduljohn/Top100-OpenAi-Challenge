@@ -103,7 +103,7 @@ function displayApiResponse(response: string): void {
 async function generateSetupCommands(apiKey: string, projectDescription: string, responseHistory: ResponseHistoryEntry[]): Promise<string> {
     const openaiApiEndpoint = 'https://api.openai.com/v1/completions';
     const prompt = `Understand the user prompt and give ONLY terminal package installation codes. ${projectDescription}`;
-    
+
     // Combine the current prompt with the context from response history
     const context = responseHistory.map(entry => entry.response).join('\n');
     const combinedPrompt = `${prompt}\n\nPrevious responses:\n${context}`;
@@ -113,7 +113,7 @@ async function generateSetupCommands(apiKey: string, projectDescription: string,
             openaiApiEndpoint,
             {
                 prompt: combinedPrompt,
-                model:"text-davinci-003",
+                model: "text-davinci-003",
                 max_tokens: 400,
             },
             {
@@ -129,10 +129,55 @@ async function generateSetupCommands(apiKey: string, projectDescription: string,
         }
 
         const generatedCommands = response.data.choices.map((choice: any) => choice.text.trim()).join('\n');
+
+        // Check if the response contains error messages
+        if (response.data.choices.some((choice: any) => choice.text.includes('error'))) {
+            throw new Error('Error detected in generated commands');
+        }
+
         return generatedCommands;
     } catch (error: any) {
-        throw new Error(`Failed to generate setup commands from OpenAI API: ${error.message}`);
+        // Handle errors and provide feedback
+        if (error.response && error.response.data && error.response.data.error) {
+            // OpenAI API error response
+            const apiErrorMessage = error.response.data.error.message;
+            throw new Error(`OpenAI API error: ${apiErrorMessage}`);
+        } else {
+            // Other errors
+            throw new Error(`Failed to generate setup commands from OpenAI API: ${error.message}`);
+        }
     }
 }
+
+async function runCommandsInTerminal(commandString: string): Promise<void> {
+    return new Promise((resolve, reject) => {
+        // Create a terminal to execute the commands
+        const terminal = vscode.window.createTerminal('DevFlow Running');
+
+        // Capture the output of the terminal
+        let terminalOutput = '';
+
+        // Attach event listener for terminal data
+        terminal.onDidWriteData(data => {
+            terminalOutput += data;
+        });
+
+        // Attach event listener for terminal exit
+        terminal.onDidClose(exitCode => {
+            if (exitCode === 0) {
+                // Resolve if the terminal exits successfully (exit code 0)
+                resolve();
+            } else {
+                // Reject with the captured output if there is an error
+                reject(new Error(`Error executing commands:\n${terminalOutput}`));
+            }
+        });
+
+        // Send the commands to the terminal
+        terminal.sendText(commandString);
+        terminal.show();
+    });
+}
+
 
 export function deactivate() {}
