@@ -3,12 +3,14 @@
   "displayName": "devflow",
   "description": "devflow",
   "version": "0.0.1",
+  "publisher": "Reverend", 
   "engines": {
     "vscode": "^1.84.0"
   },
   "categories": [
     "Other"
   ],
+  
   "activationEvents": [],
   "main": "./dist/extension.js",
   "contributes": {
