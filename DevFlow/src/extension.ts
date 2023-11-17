@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { exec } from 'child_process';
 import axios from 'axios';
+import { log } from 'console';
 
 // Define a type for response history entries
 interface ResponseHistoryEntry {
@@ -38,9 +39,11 @@ export function activate(context: vscode.ExtensionContext) {
             prompt: 'Enter your prompt:'
         });
         if(userPrompt) {
+            console.log('userPrompt :>> ', userPrompt);
                 
-            if (userPrompt.toLowerCase().includes('suggestions') || userPrompt.toLowerCase().includes('extensions')) {
-                let customPrompt = 'Analyze the response and list suitable suggestions';
+            if (userPrompt.toLowerCase().includes('shortcuts') || userPrompt.toLowerCase().includes('short cuts') || userPrompt.toLowerCase().includes('shortcut`')) {
+                console.log("suggestions");
+                let customPrompt = ' list suitable vs code shortcuts for the user prompt';
                 try {
                     const response = await generateResponse(openaiApiKey, customPrompt, responseHistory);
     
@@ -58,7 +61,7 @@ export function activate(context: vscode.ExtensionContext) {
     
                     // Ask the user to name the extension they want to install
                     const extensionName = await vscode.window.showInputBox({
-                        prompt: 'Enter the name of the extension you want to install (or press ESC to skip):'
+                        prompt: 'Enter the name of the vs code extension you want to install (or press ESC to skip):'
                     });
     
                     if (extensionName && !extensionName.toLowerCase().includes('esc')) {
@@ -140,7 +143,7 @@ function displayApiResponse(response: string): void {
 
 async function generateResponse(apiKey: string, userPrompt: string, responseHistory: ResponseHistoryEntry[]): Promise<string> {
     const openaiApiEndpoint = 'https://api.openai.com/v1/completions';
-    const prompt = `Understand the user prompt and provide relevant information. ${userPrompt}`;
+    const prompt = `Understand the user prompt and provide name suggestions for vs code extensions. ${userPrompt}`;
 
     // Combine the current prompt with the context from response history
     const context = responseHistory.map(entry => entry.response).join('\n');
@@ -168,11 +171,11 @@ async function generateResponse(apiKey: string, userPrompt: string, responseHist
 
         const generatedResponse = response.data.choices.map((choice: any) => choice.text.trim()).join('\n');
 
-        // Add functionality to suggest VS Code extensions
-        if (userPrompt.toLowerCase().includes('suggestions') || userPrompt.toLowerCase().includes('extensions')) {
-            const suggestedExtensions = suggestExtensions(generatedResponse);
-            return `${generatedResponse}\n\nSuggested Extensions:\n${suggestedExtensions}`;
-        }
+        // // Add functionality to suggest VS Code extensions
+        // if (userPrompt.toLowerCase().includes('suggestions') || userPrompt.toLowerCase().includes('extensions')) {
+        //     const suggestedExtensions = suggestExtensions(generatedResponse);
+        //     return `${generatedResponse}\n\nSuggested Extensions:\n${suggestedExtensions}`;
+        // }
 
         return generatedResponse;
     } catch (error: any) {
