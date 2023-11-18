@@ -14,19 +14,20 @@
   "contributes": {
     "commands": [
       {
-        "command": "hello",
-        "title": "Hello World"
+        "command": "transcribeAudio.transcribe",
+        "title": "Devflow-Transcribe Audio"
       },
       {
         "command": "extension.configureAndSetupProject",
-        "title": "Run DevFlow"
+        "title": "Devflow-Run"
       },
       {
-        "command": "exextension.clearResponseHistory",
-        "title": "DevFlow - Clear Response History"
+        "command": "extension.clearResponseHistory",
+        "title": "Devflow-Clear Response History"
       }
     ]
   },
+
   "scripts": {
     "vscode:prepublish": "npm run package",
     "compile": "webpack",

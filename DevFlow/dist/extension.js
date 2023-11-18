@@ -8798,7 +8798,13 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export */ });
 /* harmony import */ var vscode__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(1);
 /* harmony import */ var vscode__WEBPACK_IMPORTED_MODULE_0___default = /*#__PURE__*/__webpack_require__.n(vscode__WEBPACK_IMPORTED_MODULE_0__);
-/* harmony import */ var axios__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(2);
+/* harmony import */ var axios__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(2);
+/* harmony import */ var path__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(27);
+/* harmony import */ var path__WEBPACK_IMPORTED_MODULE_1___default = /*#__PURE__*/__webpack_require__.n(path__WEBPACK_IMPORTED_MODULE_1__);
+/* harmony import */ var fs__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(31);
+/* harmony import */ var fs__WEBPACK_IMPORTED_MODULE_2___default = /*#__PURE__*/__webpack_require__.n(fs__WEBPACK_IMPORTED_MODULE_2__);
+
+
 
 
 function activate(context) {
@@ -8864,7 +8870,11 @@ function activate(context) {
         context.globalState.update('responseHistory', responseHistory);
         vscode__WEBPACK_IMPORTED_MODULE_0__.window.showInformationMessage('Response history cleared.');
     });
-    context.subscriptions.push(disposable, clearHistoryDisposable);
+    // Add a command to transcribe audio
+    let transcribeAudioDisposable = vscode__WEBPACK_IMPORTED_MODULE_0__.commands.registerCommand('extension.transcribeAudio', async () => {
+        await transcribeAudio(context);
+    });
+    context.subscriptions.push(transcribeAudioDisposable);
 }
 function displayApiResponse(response) {
     // Get or create the output channel
@@ -8874,6 +8884,47 @@ function displayApiResponse(response) {
     // Show the output channel
     outputChannel.show(true);
 }
+async function transcribeAudio(context) {
+    const options = {
+        canSelectFiles: true,
+        canSelectFolders: false,
+        canSelectMany: false,
+        filters: {
+            'Audio files': ['wav', 'mp3', 'ogg'],
+        },
+    };
+    try {
+        const audioFileUri = await vscode__WEBPACK_IMPORTED_MODULE_0__.window.showOpenDialog(options);
+        if (audioFileUri && audioFileUri[0]) {
+            const audioFilePath = audioFileUri[0].fsPath;
+            const apiKey = context.globalState.get('openaiApiKey');
+            const apiUrl = 'https://api.openai.com/v1/audio/transcriptions';
+            const config = {
+                headers: {
+                    'Authorization': `Bearer ${apiKey}`,
+                    'Content-Type': 'multipart/form-data',
+                },
+            };
+            const audioFile = fs__WEBPACK_IMPORTED_MODULE_2__.readFileSync(audioFilePath);
+            const audioBlob = new Blob([audioFile]);
+            const formData = new FormData();
+            formData.append('model', 'whisper-1');
+            formData.append('file', audioBlob, path__WEBPACK_IMPORTED_MODULE_1__.basename(audioFilePath));
+            const response = await axios__WEBPACK_IMPORTED_MODULE_3__["default"].post(apiUrl, formData, config);
+            const transcript = response.data.text;
+            const outputChannel = vscode__WEBPACK_IMPORTED_MODULE_0__.window.createOutputChannel('Transcription');
+            outputChannel.appendLine(transcript);
+            outputChannel.show();
+        }
+        else {
+            vscode__WEBPACK_IMPORTED_MODULE_0__.window.showInformationMessage('No audio file selected');
+        }
+    }
+    catch (error) {
+        vscode__WEBPACK_IMPORTED_MODULE_0__.window.showErrorMessage('Error transcribing audio');
+        console.error(error);
+    }
+}
 async function generateSetupCommands(apiKey, projectDescription, responseHistory) {
     const openaiApiEndpoint = 'https://api.openai.com/v1/completions';
     const prompt = `Understand the user prompt and give ONLY terminal package installation codes. ${projectDescription}`;
@@ -8881,7 +8932,7 @@ async function generateSetupCommands(apiKey, projectDescription, responseHistory
     const context = responseHistory.map(entry => entry.response).join('\n');
     const combinedPrompt = `${prompt}\n\nPrevious responses:\n${context}`;
     try {
-        const response = await axios__WEBPACK_IMPORTED_MODULE_1__["default"].post(openaiApiEndpoint, {
+        const response = await axios__WEBPACK_IMPORTED_MODULE_3__["default"].post(openaiApiEndpoint, {
             prompt: combinedPrompt,
             model: "text-davinci-003",
             max_tokens: 400,
